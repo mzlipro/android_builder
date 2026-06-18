@@ -1,80 +1,65 @@
-name: android_build-ceshi
-
+name: android_build-sm
 on:
   workflow_dispatch:
 
+# 给 workflow 设定最小化权限（只读代码）
+permissions:
+  contents: read      # 读取仓库代码（默认是 read，保留显式写法更清晰）
+
 jobs:
   build:
-    runs-on: ubuntu-latest          # ubuntu-24.04（默认）
+    runs-on: ubuntu-latest
 
     steps:
-      # -------------------------------------------------
-      # 1️⃣ 检出本仓库（仅拿 workflow 本身）
-      # -------------------------------------------------
+      # 1️⃣ 检出本仓库（只需要 workflow 本身）
       - uses: actions/checkout@v4
         with:
           clean: true
 
-      # -------------------------------------------------
       # 2️⃣ 读取待构建仓库的 full name（owner/repo）
-      # -------------------------------------------------
       - id: get-project
         run: |
-          PROJECT=$(cat project-to-build)   # 文件里写 “mzlipro/webhtv”
+          PROJECT=$(cat project-to-build)   # 例如 mzlipro/webhtv
           echo "PROJECT=$PROJECT" >> "$GITHUB_OUTPUT"
 
-      # -------------------------------------------------
-      # 3️⃣ 克隆目标 Android 项目到子目录 project/
-      # -------------------------------------------------
-      - name: Clone target project
-        run: |
-          REPO="${{ steps.get-project.outputs.PROJECT }}"
-          # 如果文件里只有 owner/repo，加上协议前缀
-          if [[ "$REPO" != http* ]]; then
-            REPO="https://github.com/$REPO"
-          fi
-          git clone --depth=1 "$REPO" project
+      # 3️⃣ 使用 actions/checkout 把目标仓库克隆进子目录
+      - name: Clone target project (same org)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.get-project.outputs.PROJECT }}
+          token: ${{ secrets.GITHUB_TOKEN }}   # 自动注入的 token
+          path: project                        # 放到 ./project 目录
+          fetch-depth: 1                       # 与原来的 --depth=1 等价
 
-      # -------------------------------------------------
       # 4️⃣ 安装 Python 3.10（Chaquopy 编译依赖）
-      # -------------------------------------------------
       - name: Install Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: "pip"
 
-      # -------------------------------------------------
-      # 5️⃣ 安装 JDK（推荐 17，开启 Gradle 缓存）
-      # -------------------------------------------------
+      # 5️⃣ 安装 JDK（Gradle 缓存）
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle                     # 自动缓存 ~/.gradle
-          # cache-dependency-path: project/**/*.gradle*   # 若想更精确
+          cache: gradle
 
-      # -------------------------------------------------
-      # 6️⃣ 为 Chaquopy 指定 Python（环境变量方式）
-      # -------------------------------------------------
+      # 6️⃣ 为 Chaquopy 指定 Python
       - name: Set Chaquopy python env
         run: echo "CHAQUO_PYTHON_BUILD=/usr/bin/python3.10" >> "$GITHUB_ENV"
 
-      # -------------------------------------------------
       # 7️⃣ 构建 Debug APK
-      # -------------------------------------------------
       - name: Build the app
         working-directory: ./project
         run: |
-          chmod +x ./gradlew                # 确保可执行
+          chmod +x ./gradlew
           ./gradlew assembleDebug --stacktrace --no-daemon
 
-      # -------------------------------------------------
-      # 8️⃣ 上传生成的 APK（路径根据实际模块调整）
-      # -------------------------------------------------
+      # 8️⃣ 上传生成的 APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: ./**/*.apk
+          path: ./project/**/*.apk
