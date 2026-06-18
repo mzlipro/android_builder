@@ -1,35 +1,36 @@
-name: android_build-sm
+name: android_build-ceshi
 on:
   workflow_dispatch:
 
-# 给 workflow 设定最小化权限（只读代码）
 permissions:
-  contents: read      # 读取仓库代码（默认是 read，保留显式写法更清晰）
+  contents: read   # 让 GITHUB_TOKEN 具备读取代码的最小权限
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 检出本仓库（只需要 workflow 本身）
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # 检出本仓库
         with:
           clean: true
 
-      # 2️⃣ 读取待构建仓库的 full name（owner/repo）
+      # 读取项目名（只写 owner/repo，大小写必须和仓库实际一致）
       - id: get-project
         run: |
-          PROJECT=$(cat project-to-build)   # 例如 mzlipro/webhtv
+          PROJECT=$(cat project-to-build)   # 例如 mzlipro/webhtvtest
           echo "PROJECT=$PROJECT" >> "$GITHUB_OUTPUT"
 
-      # 3️⃣ 使用 actions/checkout 把目标仓库克隆进子目录
+      # 用默认 token 克隆目标仓库
       - name: Clone target project (same org)
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.get-project.outputs.PROJECT }}
-          token: ${{ secrets.GITHUB_TOKEN }}   # 自动注入的 token
-          path: project                        # 放到 ./project 目录
-          fetch-depth: 1                       # 与原来的 --depth=1 等价
+          token: ${{ secrets.GITHUB_TOKEN }}   # 自动注入的同组织 token
+          path: project
+          fetch-depth: 1
+
+      # ……后面的 Python、JDK、构建步骤保持不变
+                       # 与原来的 --depth=1 等价
 
       # 4️⃣ 安装 Python 3.10（Chaquopy 编译依赖）
       - name: Install Python 3.10
