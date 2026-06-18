@@ -1,7 +1,7 @@
 name: android_build-ceshi
 
 on:
-  workflow_dispatch:   # 手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,42 +9,42 @@ jobs:
 
     steps:
       # -------------------------------------------------
-      # 1️⃣ 代码检出
+      # 1️⃣ 检出本仓库（只包含 workflow 本身）
       # -------------------------------------------------
-      - name: Checkout the code
+      - name: Checkout workflow repo
         uses: actions/checkout@v4
 
       # -------------------------------------------------
-      # 2️⃣ 配置 JDK（必须同时提供 distribution 与 java-version）
-      # -------------------------------------------------
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin   # 也可以改为 zulu、adopt、semeru 等
-          java-version: 21       # 你的项目需要 JDK 21
-          cache: gradle           # 可选：缓存 ~/.gradle 目录，加速后续构建
-
-      # -------------------------------------------------
-      # 3️⃣ 读取需要克隆的项目地址（使用新式输出写法）
+      # 2️⃣ 读取需要克隆的项目地址
       # -------------------------------------------------
       - id: get-project
         name: Get project name
         run: |
-          # 读取 `project-to-build` 文件内容并写入 step 输出
           PROJECT=$(cat project-to-build)
           echo "PROJECT=$PROJECT" >> "$GITHUB_OUTPUT"
 
       # -------------------------------------------------
-      # 4️⃣ 克隆目标项目
+      # 3️⃣ 克隆目标 Android 项目
       # -------------------------------------------------
-      - name: Clone project
-        # 如果文件里只写了 “owner/repo”，这里补上协议前缀
+      - name: Clone target project
         run: |
           REPO="${{ steps.get-project.outputs.PROJECT }}"
+          # 若文件里只有 owner/repo，需要补全协议前缀
           if [[ "$REPO" != http* ]]; then
             REPO="https://github.com/$REPO"
           fi
           git clone --depth=1 "$REPO" project
+
+      # -------------------------------------------------
+      # 4️⃣ 配置 JDK（此时 project 已经在工作区，Gradle 文件可见）
+      # -------------------------------------------------
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle            # 启用 Gradle 缓存
+          # cache-dependency-path: project/**/*.gradle*   # 可选显式指定路径
 
       # -------------------------------------------------
       # 5️⃣ 编译 Android APK
@@ -52,20 +52,18 @@ jobs:
       - name: Build the app
         working-directory: ./project
         run: |
-          # 如果项目已经带有 gradlew，就不需要手动生成 wrapper
+          # 若已有 gradlew，直接使用；若没有则生成 wrapper
           if [ ! -f "./gradlew" ]; then
-            # 使用已有的 Gradle 生成 wrapper（推荐本地已经有 wrapper 时直接使用）
             ./gradlew wrapper
           fi
           chmod +x ./gradlew
           ./gradlew assembleDebug --stacktrace
 
       # -------------------------------------------------
-      # 6️⃣ 上传生成的 APK（路径根据实际产物位置可自行微调）
+      # 6️⃣ 上传 APK
       # -------------------------------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: my-build-apk
-          # 这里匹配所有子目录下的 *.apk，确保能捕获到 Gradle 默认输出路径
           path: ./project/**/*.apk
